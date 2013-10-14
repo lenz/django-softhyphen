@@ -49,7 +49,8 @@ def hyphenate(html, language='en-us', hyphenator=None, blacklist_tags=(
 # Constants
 SOFT_HYPHEN = r'&shy;'
 SPACE = r' '
-STRIP_WHITESPACE = re.compile('\w+', re.MULTILINE|re.UNICODE)
+STRIP_WHITESPACE = re.compile('\w+', re.MULTILINE | re.UNICODE)
+
 
 def hyphenate_element(soup, hyphenator, blacklist_tags):
     """
@@ -60,7 +61,7 @@ def hyphenate_element(soup, hyphenator, blacklist_tags):
     BLACKLIST = lambda tag: tag in blacklist_tags
 
     # Find any element with text in it
-    paragraphs = soup.findAll(text = lambda text: len(text) > 0)
+    paragraphs = soup.findAll(text=lambda text: len(text) > 0)
     for paragraph in paragraphs:
         # Make sure element isn't on blacklist
         if not BLACKLIST(paragraph.parent.name):
@@ -69,7 +70,6 @@ def hyphenate_element(soup, hyphenator, blacklist_tags):
                 (lambda x: hyphenator.inserted(x.group(), SOFT_HYPHEN)), paragraph)
             )
     return soup
-
 
 
 DICTIONARIES = {
@@ -103,6 +103,8 @@ DICTIONARIES = {
     'sv-se': 'hyph_sv_SE',
     'uk-ua': 'hyph_uk_UA'
 }
+
+
 def get_hyphenator_for_language(language):
     """
     Create a Hyphenator for the given language. Uses English if the
@@ -120,6 +122,7 @@ def get_hyphenator_for_language(language):
         os.path.dirname(__file__),
         'dicts/%s.dic' % DICTIONARIES[language]
     )
+
     hyph = Hyphenator(path)
     syllabes = getattr(settings, 'SOFTHYPHEN_SYLLABES', None)
     if syllabes:
@@ -128,13 +131,11 @@ def get_hyphenator_for_language(language):
                 isinstance(syllabes[language], list)
             )) and len(syllabes[language]) == 2:
                 hyph.left = syllabes[language][0]
-                hyph.left = syllabes[language][1]
+                hyph.right = syllabes[language][1]
             else:
-                # TODO: raise warning
-                pass
+                raise Exception("Softhyphen Exception: settings.SOFTHYPHEN_SYLLABES has invalid format")
         else:
-            # TODO: raise warning
-            pass
+            raise Exception("Softhyphen Exception: settings.SOFTHYPHEN_SYLLABES does not contain language code '%s'" % language)
 
     return hyph
 
