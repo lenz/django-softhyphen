@@ -6,7 +6,8 @@ Author: Filipe Fortes
 import os
 import re
 from hyphenator import Hyphenator
-from BeautifulSoup import BeautifulSoup, NavigableString
+from BeautifulSoup import BeautifulSoup
+from django.conf import settings
 
 
 def hyphenate(html, language='en-us', hyphenator=None, blacklist_tags=(
@@ -57,7 +58,7 @@ def hyphenate_element(soup, hyphenator, blacklist_tags):
     """
     # Blacklist function
     BLACKLIST = lambda tag: tag in blacklist_tags
-    
+
     # Find any element with text in it
     paragraphs = soup.findAll(text = lambda text: len(text) > 0)
     for paragraph in paragraphs:
@@ -68,9 +69,9 @@ def hyphenate_element(soup, hyphenator, blacklist_tags):
                 (lambda x: hyphenator.inserted(x.group(), SOFT_HYPHEN)), paragraph)
             )
     return soup
-            
 
-    
+
+
 DICTIONARIES = {
     'cs-cz': 'hyph_cs_CZ',
     'da-dk': 'hyph_da_DK',
@@ -119,7 +120,24 @@ def get_hyphenator_for_language(language):
         os.path.dirname(__file__),
         'dicts/%s.dic' % DICTIONARIES[language]
     )
-    return Hyphenator(path)
+    hyph = Hyphenator(path)
+    syllabes = getattr(settings, 'SOFTHYPHEN_SYLLABES', None)
+    if syllabes:
+        if language in syllabes:
+            if (isinstance(syllabes[language], tuple) or (
+                isinstance(syllabes[language], list)
+            )) and len(syllabes[language]) == 2:
+                hyph.left = syllabes[language][0]
+                hyph.left = syllabes[language][1]
+            else:
+                # TODO: raise warning
+                pass
+        else:
+            # TODO: raise warning
+            pass
+
+    return hyph
+
 
 # Test when standalone
 def _test():
