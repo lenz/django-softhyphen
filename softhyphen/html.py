@@ -1,49 +1,73 @@
 """
 Hyphenates an HTML fragement using soft hyphens
 
-Author: Filipe Fortes
+Author by Filipe Fortes, modified by Ben Welsh
 """
+from __future__ import absolute_import
+
 import os
 import re
-from hyphenator import Hyphenator
-from BeautifulSoup import BeautifulSoup
+import six
+from bs4 import BeautifulSoup
+from django.utils.translation import get_language
 from django.conf import settings
+from .hyphenator import Hyphenator
+from bs4.element import PreformattedString
 
 
-def hyphenate(html, language='en-us', hyphenator=None, blacklist_tags=(
+class DontEscapeDammit(PreformattedString):
+    """
+    A BeautifulSoup trick that lets us insert a `&shy;` into the HTML
+    without BS escaping the `&` and turning it into `&amp;shy;`.
+    """
+    def output_ready(self, formatter=None):
+        self.format_string(self, formatter)
+        return self.PREFIX + self + self.SUFFIX
+
+
+def hyphenate(html, language=None, hyphenator=None, blacklist_tags=(
     'code', 'tt', 'pre', 'head', 'title', 'script', 'style', 'meta', 'object',
     'embed', 'samp', 'var', 'math', 'select', 'option', 'input', 'textarea',
-    'span',
-    )):
+    'span')
+        ):
     """
     Hyphenate a fragement of HTML
 
-    >>> hyphenate_html('<p>It is <em>beautiful</em> outside today!</p>')
+    >>> hyphenate('<p>It is <em>beautiful</em> outside today!</p>')
     u'<p>It is <em>beau&shy;ti&shy;ful</em> out&shy;side today!</p>'
 
-    >>> hyphenate_html('O paralelepipedo atrevessou a rua', 'pt-br')
-    u'O pa&shy;ra&shy;le&shy;le&shy;pi&shy;pe&shy;do atre&shy;ves&shy;sou a rua'
+    >>> hyphenate('O paralelepipedo atrevessou', 'pt-br')
+    u'O pa&shy;ra&shy;le&shy;le&shy;pi&shy;pe&shy;do atre&shy;ves&shy;sou'
 
     Content inside <code>, <tt>, and <pre> blocks is not hyphenated
-    >>> hyphenate_html('Document: <code>document + page_status</code>')
+    >>> hyphenate('Document: <code>document + page_status</code>')
     u'Doc&shy;u&shy;ment: <code>document + page_status</code>'
 
     Short words are not hyphenated
 
-    >>> hyphenate_html("<p>The brave men, living and dead.</p>")
+    >>> hyphenate("<p>The brave men, living and dead.</p>")
     u'<p>The brave men, liv&shy;ing and dead.</p>'
     """
     # Load hyphenator if one is not provided
+    if not language:
+        language = get_language() or 'en-us'
+
+    if language == 'en':
+        language = 'en-us'
+    elif '-' not in language:
+        # Language code is "en-us", "it-it", "nl-nl"
+        language = "{0}-{0}".format(language)
+
     if not hyphenator:
         hyphenator = get_hyphenator_for_language(language)
 
     # Create HTML tree
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, "html.parser")
 
     # Recursively hyphenate each element
     hyphenate_element(soup, hyphenator, blacklist_tags)
 
-    return unicode(soup)
+    return six.text_type(soup)
 
 
 # Constants
@@ -52,23 +76,26 @@ SPACE = r' '
 STRIP_WHITESPACE = re.compile('\w+', re.MULTILINE | re.UNICODE)
 
 
+def blacklist(name, blacklist):
+    return name in blacklist
+
+
 def hyphenate_element(soup, hyphenator, blacklist_tags):
     """
     Hyphenate the text within an element, returning the hyphenated version
     Walks the DOM Tree to track down all text
     """
-    # Blacklist function
-    BLACKLIST = lambda tag: tag in blacklist_tags
-
     # Find any element with text in it
     paragraphs = soup.findAll(text=lambda text: len(text) > 0)
     for paragraph in paragraphs:
         # Make sure element isn't on blacklist
-        if not BLACKLIST(paragraph.parent.name):
+        if not blacklist(paragraph.parent.name, blacklist_tags):
             # Replace text with hyphened version
-            paragraph.replaceWith(STRIP_WHITESPACE.sub(
-                (lambda x: hyphenator.inserted(x.group(), SOFT_HYPHEN)), paragraph)
+            new_string = STRIP_WHITESPACE.sub(
+                (lambda x: hyphenator.inserted(x.group(), SOFT_HYPHEN)),
+                paragraph
             )
+            paragraph.replaceWith(DontEscapeDammit(new_string))
     return soup
 
 
@@ -116,7 +143,7 @@ def get_hyphenator_for_language(language):
     language = language.lower()
 
     # Fallback to English
-    if not language in DICTIONARIES:
+    if language not in DICTIONARIES:
         language = 'en-us'
     path = os.path.join(
         os.path.dirname(__file__),
@@ -145,6 +172,7 @@ def _test():
     """Run doctests"""
     import doctest
     doctest.testmod(verbose=True)
+
 
 if __name__ == '__main__':
     _test()

@@ -2,7 +2,6 @@
 from django import template
 from django.utils.safestring import mark_safe
 from django.template.defaultfilters import stringfilter
-from django.utils import translation
 from django.core.cache import cache
 
 from softhyphen.html import hyphenate
@@ -11,7 +10,8 @@ import hashlib
 register = template.Library()
 
 
-def softhyphen(value, language=translation.get_language()):
+@register.filter
+def softhyphen(value, language=None):
     """
     Hyphenates html.
     """
@@ -22,7 +22,7 @@ softhyphen = stringfilter(softhyphen)
 softhyphen = register.filter(softhyphen)
 
 
-def cached_softhyphen(value, language=translation.get_language()):
+def cached_softhyphen(value, language=None):
     """
     Hyphenates html and caches result.
     """

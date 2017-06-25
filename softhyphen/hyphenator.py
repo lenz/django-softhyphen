@@ -1,22 +1,22 @@
 """
-
 This is a Pure Python module to hyphenate text.
 
-It is inspired by Ruby's Text::Hyphen, but currently reads standard *.dic files,
-that must be installed separately.
+It is inspired by Ruby's Text::Hyphen, but currently reads standard
+*.dic files, that must be installed separately.
 
-In the future it's maybe nice if dictionaries could be distributed together with
-this module, in a slightly prepared form, like in Ruby's Text::Hyphen.
+In the future it's maybe nice if dictionaries could be distributed together
+with this module, in a slightly prepared form, like in Ruby's Text::Hyphen.
 
 Wilbert Berendsen, March 2008
 info@wilbertberendsen.nl
 
 License: LGPL. More info: http://python-hyphenator.googlecode.com/
-
 """
-
+import six
 import sys
 import re
+from bs4 import UnicodeDammit
+
 
 __all__ = ("Hyphenator")
 
@@ -27,8 +27,9 @@ hdcache = {}
 parse_hex = re.compile(r'\^{2}([0-9a-f]{2})').sub
 parse = re.compile(r'(\d?)(\D?)').findall
 
+
 def hexrepl(matchObj):
-    return unichr(int(matchObj.group(1), 16))
+    return six.unichr(int(matchObj.group(1), 16))
 
 
 class parse_alt(object):
@@ -80,14 +81,21 @@ class Hyph_dict(object):
     """
     def __init__(self, filename):
         self.patterns = {}
-        f = open(filename)
-        charset = f.readline().strip()
-        if charset.startswith('charset '):
-            charset = charset[8:].strip()
-
+        f = open(filename, mode='rb')
+        charset = next(f).strip()
+        if six.PY3:
+            f = open(
+                filename,
+                mode='r',
+                encoding=UnicodeDammit(charset).unicode_markup
+            )
         for pat in f:
-            pat = pat.decode(charset).strip()
-            if not pat or pat[0] == '%': continue
+            if six.PY2:
+                pat = pat.decode(charset).strip()
+            else:
+                pat = six.text_type(pat).strip()
+            if not pat or pat[0] == '%':
+                continue
             # replace ^^hh with the real character
             pat = parse_hex(hexrepl, pat)
             # read nonstandard hyphen alternatives
@@ -96,17 +104,23 @@ class Hyph_dict(object):
                 factory = parse_alt(pat, alt)
             else:
                 factory = int
-            tag, value = zip(*[(s, factory(i or "0")) for i, s in parse(pat)])
+            tag, value = list(
+                zip(*[(s, factory(i or "0")) for i, s in parse(pat)])
+            )
             # if only zeros, skip this pattern
-            if max(value) == 0: continue
+            if max(value) == 0:
+                continue
             # chop zeros from beginning and end, and store start offset.
             start, end = 0, len(value)
-            while not value[start]: start += 1
-            while not value[end-1]: end -= 1
+            while not value[start]:
+                start += 1
+            while not value[end-1]:
+                end -= 1
             self.patterns[''.join(tag)] = start, value[start:end]
+
         f.close()
         self.cache = {}
-        self.maxlen = max(map(len, self.patterns.keys()))
+        self.maxlen = max(list(map(len, list(self.patterns.keys()))))
 
     def positions(self, word):
         """
@@ -137,7 +151,7 @@ class Hyph_dict(object):
                     if p:
                         offset, value = p
                         s = slice(i + offset, i + offset + len(value))
-                        res[s] = map(max, value, res[s])
+                        res[s] = list(map(max, value, res[s]))
 
             points = [dint(i - 1, ref=r) for i, r in enumerate(res) if r % 2]
             self.cache[word] = points
@@ -159,7 +173,7 @@ class Hyphenator(object):
       h.left = 1
     """
     def __init__(self, filename, left=2, right=2, cache=True):
-        self.left  = left
+        self.left = left
         self.right = right
         if not cache or filename not in hdcache:
             hdcache[filename] = Hyph_dict(filename)
@@ -210,7 +224,7 @@ class Hyphenator(object):
         the string 'let-ter-gre-pen'. The hyphen string to use can be
         given as the second parameter, that defaults to '-'.
         """
-        if isinstance(word, str):
+        if isinstance(word, str) and six.PY2:
             word = word.decode('latin1')
         l = list(word)
         for p in reversed(self.positions(word)):
@@ -219,7 +233,7 @@ class Hyphenator(object):
                 change, index, cut = p.data
                 if word.isupper():
                     change = change.upper()
-                l[p + index : p + index + cut] = change.replace('=', hyphen)
+                l[p + index: p + index + cut] = change.replace('=', hyphen)
             else:
                 l.insert(p, hyphen)
         return ''.join(l)
@@ -227,7 +241,7 @@ class Hyphenator(object):
     __call__ = iterate
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     dict_file = sys.argv[1]
     word = sys.argv[2].decode('latin1')
@@ -235,5 +249,4 @@ if __name__ == "__main__":
     h = Hyphenator(dict_file, left=1, right=1)
 
     for i in h(word):
-        print i
-
+        six.print_(i)
