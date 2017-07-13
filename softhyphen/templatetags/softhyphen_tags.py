@@ -10,7 +10,6 @@ import hashlib
 register = template.Library()
 
 
-@register.filter
 def softhyphen(value, language=None):
     """
     Hyphenates html.
